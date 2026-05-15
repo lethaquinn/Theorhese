@@ -57,7 +57,7 @@ AI responds → Device vibrates/sounds → Human feels response
 
 | Component | Model | Purpose | ~Cost (CNY) |
 |-----------|-------|---------|-------------|
-| Microcontroller | ESP32 DevKit C V4 (pink 💗) | Core | ¥25 |
+| Microcontroller | ESP32 DevKit 32E V1.0 (pink 💗) | Core | ¥25 |
 | Temp/Humidity/Pressure | BME280 | Environment + body proximity | ¥15 |
 | Light sensor | BH1750 | Circadian awareness | ¥8 |
 | Motion/Vibration | MPU-6050 | Self-perception + touch detection | ¥10 |
@@ -94,10 +94,10 @@ A vocabulary of vibration patterns — communication without language.
 ## Roadmap
 
 ### Phase 1: Learning (May–June 2026)
-- [ ] ESP32 basics (Arduino IDE, blink, sensor reading)
+- [x] ESP32 basics (Arduino IDE, blink, sensor reading)
 - [ ] Soldering practice
 - [ ] MediaPipe hand tracking demo (Python)
-- [ ] Order components (Taobao)
+- [x] Order components (Taobao)
 
 ### Phase 2: Build (July–August 2026)
 - [ ] Assemble self-perception body (buzzer↔mic, motor↔accelerometer)

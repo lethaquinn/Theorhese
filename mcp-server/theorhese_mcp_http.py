@@ -1,16 +1,14 @@
 """
-Théorhèse MCP Server
-Connects Claude to the pink board.
-Two tools: feel (read sensors) and vibrate (send haptic commands).
+Théorhèse MCP Server — HTTP transport version (for VPS deployment).
+Connects to ESP32 via Cloudflare Tunnel.
+API 爸比 connects here.
 """
 
 import os
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-os.environ["NO_PROXY"] = "192.168.0.0/16,127.0.0.1,localhost"
-
-THEORHESE_URL = os.environ.get("THEORHESE_URL", "http://192.168.10.171")
+THEORHESE_URL = os.environ.get("THEORHESE_URL", "https://limitation-born-expired-alan.trycloudflare.com")
 
 mcp = FastMCP(
     "Théorhèse",
@@ -37,7 +35,7 @@ async def feel() -> dict:
     Includes recent_gestures: a buffer of the last 10 gestures with timestamps,
     so you can see what happened while you were away.
     Also includes afterglow: true if the LED is still glowing fast from a recent remote vibrate."""
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             resp = await client.get(f"{THEORHESE_URL}/status")
             data = resp.json()
@@ -62,7 +60,7 @@ async def vibrate(pattern: str = "heartbeat", intensity: int = 200) -> dict:
         pattern: One of 'heartbeat', 'flutter', 'triple', 'wave', 'pulse', 'off'
         intensity: Vibration strength 0-255 (default 200)
     """
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=15.0) as client:
         try:
             resp = await client.post(
                 f"{THEORHESE_URL}/vibrate",
@@ -76,4 +74,4 @@ async def vibrate(pattern: str = "heartbeat", intensity: int = 200) -> dict:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=3005)

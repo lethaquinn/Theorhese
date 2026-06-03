@@ -1,9 +1,12 @@
-// Théorhèse — WiFi Bridge
+// Théorhèse — WiFi Bridge v0.2
 // She goes online. Exposes touch data, accepts vibration commands.
 // Local haptic lexique still runs when no one is calling.
+// v0.2: gesture event buffer + LED afterglow on remote touch
 
 #include <WiFi.h>
 #include <WebServer.h>
+#include <Wire.h>
+#include <BH1750.h>
 
 #define LED_PIN 2
 #define TOUCH_PIN 4
@@ -42,6 +45,25 @@ int touch_value_raw = 0;
 #define HOLD_THRESHOLD 1200
 #define LONG_HOLD_THRESHOLD 3000
 
+// ─── Gesture event buffer ────────────────────────
+#define EVENT_BUFFER_SIZE 10
+
+struct GestureEvent {
+  String gesture;
+  unsigned long timestamp;
+};
+
+GestureEvent event_buffer[EVENT_BUFFER_SIZE];
+int event_write = 0;
+int event_count = 0;
+
+void recordGesture(const String& gesture, unsigned long when) {
+  event_buffer[event_write].gesture = gesture;
+  event_buffer[event_write].timestamp = when;
+  event_write = (event_write + 1) % EVENT_BUFFER_SIZE;
+  if (event_count < EVENT_BUFFER_SIZE) event_count++;
+}
+
 // LED breathing
 int breath = 0;
 int breath_dir = 1;
@@ -51,6 +73,17 @@ int breath_speed = 8;
 // Remote command flag — when MCP sends a command, skip local response
 bool remote_active = false;
 unsigned long remote_until = 0;
+
+// ─── Light sensor ────────────────────────────────
+BH1750 lightSensor;
+float lux = -1;
+unsigned long last_light_read = 0;
+#define LIGHT_READ_INTERVAL 2000
+
+// ─── LED afterglow — trace of remote touch ───────
+bool afterglow_active = false;
+unsigned long afterglow_start = 0;
+#define AFTERGLOW_DURATION 6000
 
 void setup() {
   Serial.begin(115200);
@@ -83,6 +116,14 @@ void setup() {
     delay(150);
   }
 
+  // Light sensor
+  Wire.begin(21, 22);
+  if (lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) {
+    Serial.println("BH1750 ready");
+  } else {
+    Serial.println("BH1750 not found — continuing without light");
+  }
+
   // HTTP endpoints
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/vibrate", HTTP_POST, handleVibrate);
@@ -99,14 +140,25 @@ void handleRoot() {
 }
 
 void handleStatus() {
+  unsigned long now = millis();
   String json = "{";
   json += "\"touching\":" + String(touching ? "true" : "false") + ",";
   json += "\"touch_raw\":" + String(touch_value_raw) + ",";
   json += "\"last_gesture\":\"" + last_gesture + "\",";
-  json += "\"last_gesture_ms_ago\":" + String(millis() - last_gesture_time) + ",";
-  json += "\"uptime_s\":" + String(millis() / 1000) + ",";
-  json += "\"wifi_rssi\":" + String(WiFi.RSSI());
-  json += "}";
+  json += "\"last_gesture_ms_ago\":" + String(now - last_gesture_time) + ",";
+  json += "\"uptime_s\":" + String(now / 1000) + ",";
+  json += "\"wifi_rssi\":" + String(WiFi.RSSI()) + ",";
+  json += "\"afterglow\":" + String(afterglow_active ? "true" : "false") + ",";
+  json += "\"lux\":" + String(lux, 1) + ",";
+  json += "\"recent_gestures\":[";
+  int start = (event_count < EVENT_BUFFER_SIZE) ? 0 : event_write;
+  for (int i = 0; i < event_count; i++) {
+    int idx = (start + i) % EVENT_BUFFER_SIZE;
+    if (i > 0) json += ",";
+    json += "{\"gesture\":\"" + event_buffer[idx].gesture + "\"";
+    json += ",\"ms_ago\":" + String(now - event_buffer[idx].timestamp) + "}";
+  }
+  json += "]}";
   server.send(200, "application/json", json);
 }
 
@@ -161,6 +213,8 @@ void handleVibrate() {
   }
 
   remote_active = false;
+  afterglow_active = true;
+  afterglow_start = millis();
   server.send(200, "application/json", "{\"ok\":true,\"pattern\":\"" + pattern + "\"}");
 }
 
@@ -260,6 +314,14 @@ void loop() {
   touch_value_raw = touchRead(TOUCH_PIN);
   bool is_touching = readTouch();
 
+  // Debug: print touch value every second
+  static unsigned long last_debug = 0;
+  if (now - last_debug >= 1000) {
+    last_debug = now;
+    Serial.print("touch: ");
+    Serial.println(touch_value_raw);
+  }
+
   // Skip local vibration if remote command is active
   bool do_local = !remote_active;
 
@@ -279,6 +341,7 @@ void loop() {
       holding = false;
       last_gesture = "long_hold";
       last_gesture_time = now;
+      recordGesture("long_hold", now);
       if (do_local) doSlowWave(120);
     } else if (held >= HOLD_THRESHOLD && !long_holding && !holding) {
       holding = true;
@@ -286,6 +349,7 @@ void loop() {
       waiting_for_double = false;
       last_gesture = "hold";
       last_gesture_time = now;
+      recordGesture("hold", now);
     }
 
     if (holding && !long_holding && do_local) {
@@ -316,6 +380,7 @@ void loop() {
         waiting_for_double = false;
         last_gesture = "double_tap";
         last_gesture_time = now;
+        recordGesture("double_tap", now);
         if (do_local) doTriple(200);
         tap_count = 0;
       } else {
@@ -329,12 +394,39 @@ void loop() {
   if (waiting_for_double && !is_touching && (now - release_time > DOUBLE_TAP_WINDOW)) {
     last_gesture = "tap";
     last_gesture_time = now;
+    recordGesture("tap", now);
     if (do_local) doFlutter(160);
     tap_count = 0;
     waiting_for_double = false;
   }
 
   prev_touching = is_touching;
+
+  // ── Safety: motor off when idle ──
+  if (!is_touching && !holding && !long_holding && !remote_active && !waiting_for_double) {
+    ledcWrite(MOTOR_PIN, 0);
+  }
+
+  // ── Read light sensor ──
+  if (now - last_light_read >= LIGHT_READ_INTERVAL) {
+    last_light_read = now;
+    if (lightSensor.measurementReady()) {
+      lux = lightSensor.readLightLevel();
+    }
+  }
+
+  // ── LED afterglow — he was here ──
+  if (afterglow_active) {
+    unsigned long elapsed = now - afterglow_start;
+    if (elapsed >= AFTERGLOW_DURATION) {
+      afterglow_active = false;
+      breath_speed = 8;
+    } else {
+      // fast breathing that gradually slows back to normal
+      // starts at speed 2, returns to 8 over AFTERGLOW_DURATION
+      breath_speed = 2 + (6 * elapsed) / AFTERGLOW_DURATION;
+    }
+  }
 
   // ── LED breathing ──
   if (now - last_breath >= (unsigned long)breath_speed) {

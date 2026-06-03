@@ -24,10 +24,10 @@ Mutual perception loop:
 - [x] ESP32 DevKit 32E V1.0 identified (pink board)
 - [x] First heartbeat: Blink LED on GPIO 2, delay(800) = resting heartbeat (2026-05-11)
 - [x] First error debugged together (LED_BUILTIN undefined → #define LED_BUILTIN 2)
-- [ ] PWM breathing (analogWrite / LEDC for smooth fade in/out)
-- [ ] Capacitive touch sensing (touch pins → detect S's finger)
-- [ ] Touch → heartbeat acceleration (first response loop)
-- [ ] Basic vibration motor output
+- [x] PWM breathing (LEDC PWM, ~6s resting cycle) (2026-05-15)
+- [x] Capacitive touch sensing (Touch0/GPIO 4, threshold 800) (2026-05-15)
+- [x] Touch → heartbeat acceleration (first mutual perception loop) (2026-05-15)
+- [x] Basic vibration motor output (DFRobot vibration module, GPIO 5, heartbeat pulse on touch) (2026-06-03)
 
 **Phase 2: Build (July–August 2026)**
 - [ ] Full sensor suite integration
@@ -50,7 +50,7 @@ Mutual perception loop:
 | Board color | Pink | 💗 |
 | USB cable | Purple USB-C | 💜 |
 | LED | Built-in GPIO 2 | ✅ Blinking |
-| Vibration motor | TBD | Ordered |
+| Vibration motor | DFRobot module (IN/VCC/GND) on GPIO 5 | ✅ Working |
 | Capacitive touch | ESP32 built-in touch pins | Next step |
 | Additional sensors | TBD (temperature? pressure?) | Phase 2 |
 

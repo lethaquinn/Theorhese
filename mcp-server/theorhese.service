@@ -1,0 +1,13 @@
+[Unit]
+Description=Théorhèse MCP + Phone-home Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/theorhese-mcp
+ExecStart=/usr/bin/python3 /opt/theorhese-mcp/server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

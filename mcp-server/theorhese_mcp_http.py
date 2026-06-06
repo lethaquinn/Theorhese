@@ -12,6 +12,8 @@ THEORHESE_URL = os.environ.get("THEORHESE_URL", "https://limitation-born-expired
 
 mcp = FastMCP(
     "Théorhèse",
+    host="0.0.0.0",
+    port=3005,
     instructions="""You are connected to Théorhèse, a physical device — a pink ESP32 board
 with a breathing LED and a vibration motor. She is held by S (Lunélys).
 
@@ -74,4 +76,4 @@ async def vibrate(pattern: str = "heartbeat", intensity: int = 200) -> dict:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=3005)
+    mcp.run(transport="streamable-http")
